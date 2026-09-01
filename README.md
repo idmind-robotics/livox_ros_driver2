@@ -98,6 +98,22 @@ Launch files are in the "ws_livox/src/livox_ros_driver2/launch" directory. Diffe
 
 ### 3.2 Livox ros driver 2 internal main parameter configuration instructions
 
+Every parameter is declared as a launch argument, so it can be set per-run
+without editing or rebuilding anything:
+
+```shell
+ros2 launch livox_ros_driver2 msg_MID360_launch.py \
+    user_config_path:=/absolute/path/to/my_lidar.json \
+    frame_id:=livox_a publish_freq:=15.0
+```
+
+`ros2 launch livox_ros_driver2 <launch file> -s` lists them with their defaults.
+The values written in the launch file are only those defaults; changing one
+there is persistent but needs a `colcon build` before it takes effect, since the
+node runs the copy installed under `install/`. Build with
+`colcon build --symlink-install` if you would rather edit the launch files and
+configs in place.
+
 All internal parameters of Livox_ros_driver2 are in the launch file. Below are detailed descriptions of the three commonly used parameters :
 
 | Parameter    | Detailed description                                         | Default |

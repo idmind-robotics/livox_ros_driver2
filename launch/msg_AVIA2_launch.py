@@ -1,7 +1,10 @@
 import os
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
+from launch.actions import DeclareLaunchArgument
+from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
+from launch_ros.parameter_descriptions import ParameterValue
 import launch
 
 ################### user configure parameters for ros2 start ###################
@@ -27,21 +30,57 @@ qos_depth        = 0             # 0 keeps the 64 (per-lidar) / 256 (shared) def
 timestamp_source = 'lidar'       # 'lidar' or 'ros'
 ################### user configure parameters for ros2 end #####################
 
+# Every entry below is both a launch argument and a node parameter, so any of
+# them can be overridden on the command line without editing this file:
+#
+#   ros2 launch livox_ros_driver2 msg_AVIA2_launch.py \
+#       user_config_path:=/absolute/path/to/my_lidar.json frame_id:=livox_a
+#
+# The values above are only the defaults.
+default_params = {
+    'xfer_format': xfer_format,
+    'multi_topic': multi_topic,
+    'data_src': data_src,
+    'publish_freq': publish_freq,
+    'output_data_type': output_type,
+    'frame_id': frame_id,
+    'user_config_path': user_config_path,
+    'imu_frame_id': imu_frame_id,
+    'imu_publish_freq': imu_publish_freq,
+    'lidar_topic': lidar_topic,
+    'imu_topic': imu_topic,
+    'qos_reliability': qos_reliability,
+    'qos_depth': qos_depth,
+    'timestamp_source': timestamp_source,
+}
+
+# One-line help for each, shown by 'ros2 launch <file> -s'.
+param_help = {
+    'xfer_format': '0 = PointCloud2 (PointXYZRTLT), 1 = Livox CustomMsg',
+    'multi_topic': '0 = all LiDARs share one topic, 1 = one topic per LiDAR',
+    'data_src': 'only 0 (raw lidar) is supported',
+    'publish_freq': 'point cloud publish rate in Hz, 0.5 to 100',
+    'output_data_type': 'only 0 (publish to ROS) is supported',
+    'frame_id': 'frame_id on the point cloud messages',
+    'user_config_path': 'absolute path to the LiDAR JSON config',
+    'imu_frame_id': "frame_id on the IMU messages; empty means same as frame_id",
+    'imu_publish_freq': 'max IMU rate in Hz; 0.0 publishes every sample (~200Hz)',
+    'lidar_topic': 'base topic for point cloud data',
+    'imu_topic': 'base topic for IMU data',
+    'qos_reliability': "'reliable' or 'best_effort'",
+    'qos_depth': 'publisher queue depth; 0 keeps the 64/256 defaults',
+    'timestamp_source': "'lidar' for the device clock, 'ros' for the node clock",
+}
+
 livox_ros2_params = [
-    {"xfer_format": xfer_format},
-    {"multi_topic": multi_topic},
-    {"data_src": data_src},
-    {"publish_freq": publish_freq},
-    {"output_data_type": output_type},
-    {"frame_id": frame_id},
-    {"user_config_path": user_config_path},
-    {"imu_frame_id": imu_frame_id},
-    {"imu_publish_freq": imu_publish_freq},
-    {"lidar_topic": lidar_topic},
-    {"imu_topic": imu_topic},
-    {"qos_reliability": qos_reliability},
-    {"qos_depth": qos_depth},
-    {"timestamp_source": timestamp_source},
+    {name: ParameterValue(LaunchConfiguration(name), value_type=type(default))}
+    for name, default in default_params.items()
+]
+
+launch_args = [
+    DeclareLaunchArgument(name, default_value=str(default),
+                          description=param_help[name])
+    for name, default in default_params.items()
 ]
 
 
@@ -54,7 +93,7 @@ def generate_launch_description():
         parameters=livox_ros2_params
         )
 
-    return LaunchDescription([
+    return LaunchDescription(launch_args + [
         livox_driver,
         # launch.actions.RegisterEventHandler(
         #     event_handler=launch.event_handlers.OnProcessExit(
