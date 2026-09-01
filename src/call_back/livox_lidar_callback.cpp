@@ -52,6 +52,18 @@ void LivoxLidarCallback::LidarInfoChangeCallback(const uint32_t handle,
     }
     LidarDevice *p_lidar = &(lds_lidar->lidars_[index]);
     p_lidar->lidar_type = kLivoxLidarType;
+    p_lidar->handle = handle;
+    // Nothing to configure for a lidar we have no config for: -1 means "leave
+    // as-is" for every setting, and the extrinsic stays identity. Mark it
+    // sampling, otherwise Lddc skips it and the device is discovered but never
+    // published.
+    p_lidar->livox_config = UserLivoxLidarConfig{};
+    p_lidar->livox_config.handle = handle;
+    p_lidar->livox_config.pcl_data_type = -1;
+    p_lidar->livox_config.pattern_mode = -1;
+    p_lidar->livox_config.blind_spot_set = -1;
+    p_lidar->livox_config.dual_emit_en = -1;
+    p_lidar->connect_state = kConnectStateSampling;
   } else {
     // set the lidar according to the user-defined config
     const UserLivoxLidarConfig& config = lidar_device->livox_config;
@@ -93,15 +105,11 @@ void LivoxLidarCallback::LidarInfoChangeCallback(const uint32_t handle,
       }
     } // free lock for set_bits
 
-    // set extrinsic params into lidar
-    LivoxLidarInstallAttitude attitude {
-      config.extrinsic_param.roll,
-      config.extrinsic_param.pitch,
-      config.extrinsic_param.yaw,
-      config.extrinsic_param.x,
-      config.extrinsic_param.y,
-      config.extrinsic_param.z
-    };
+    // The driver applies 'extrinsic_parameter' itself, in LidarPubHandler. The
+    // install attitude is stored on the device and would otherwise be applied a
+    // second time, on top of ours, so zero it explicitly. Zeroing rather than
+    // leaving it alone also clears whatever a previous run wrote.
+    LivoxLidarInstallAttitude attitude {0.0f, 0.0f, 0.0f, 0, 0, 0};
     SetLivoxLidarInstallAttitude(config.handle, &attitude,
                                  LivoxLidarCallback::SetAttitudeCallback, lds_lidar);
   }
@@ -274,16 +282,8 @@ void LivoxLidarCallback::SetAttitudeCallback(livox_status status, uint32_t handl
   } else if (status == kLivoxLidarStatusTimeout) {
     std::cout << "set lidar attitude timeout, ip: " << IpNumToString(handle)
               << ", try again..." << std::endl;
-    const UserLivoxLidarConfig& config = lidar_device->livox_config;
-    LivoxLidarInstallAttitude attitude {
-      config.extrinsic_param.roll,
-      config.extrinsic_param.pitch,
-      config.extrinsic_param.yaw,
-      config.extrinsic_param.x,
-      config.extrinsic_param.y,
-      config.extrinsic_param.z
-    };
-    SetLivoxLidarInstallAttitude(config.handle, &attitude,
+    LivoxLidarInstallAttitude attitude {0.0f, 0.0f, 0.0f, 0, 0, 0};
+    SetLivoxLidarInstallAttitude(lidar_device->livox_config.handle, &attitude,
                                  LivoxLidarCallback::SetAttitudeCallback, lds_lidar);
   } else {
     std::cout << "failed to set lidar attitude, ip: " << IpNumToString(handle) << std::endl;

@@ -75,6 +75,11 @@ void Lds::ResetLds(uint8_t data_src) {
 
 void Lds::RequestExit() {
   request_exit_ = true;
+  // Wake the two poll threads, which are otherwise parked in Semaphore::Wait()
+  // for data that will never arrive once we are shutting down. Without this the
+  // join() in ~DriverNode never returns.
+  pcd_semaphore_.Signal();
+  imu_semaphore_.Signal();
 }
 
 bool Lds::IsAllQueueEmpty() {

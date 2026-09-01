@@ -99,6 +99,11 @@ rclcpp_components_register_node(${PROJECT_NAME}
 if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)
   ament_lint_auto_find_test_dependencies()
+
+  # Plain assert-based self-check for the extrinsic maths; no gtest needed.
+  add_executable(test_extrinsic test/test_extrinsic.cpp)
+  target_include_directories(test_extrinsic PRIVATE src)
+  add_test(NAME test_extrinsic COMMAND test_extrinsic)
 endif()
 
 ament_auto_package(INSTALL_TO_SHARE

@@ -60,11 +60,12 @@ class LidarPubHandler {
   void ProcessSphericalPoint(RawPacket & pkt);
   void ProcessDoubleEchoPoint(RawPacket& pkt);
   std::vector<PointXyzlt> points_clouds_;
+  /** Identity until SetLidarsExtParam() supplies the configured extrinsic. */
   ExtParameterDetailed extrinsic_ = {
     {0, 0, 0},
     {
       {1, 0, 0},
-      {0, 1, 1},
+      {0, 1, 0},
       {0, 0, 1}
     }
   };

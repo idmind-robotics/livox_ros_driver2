@@ -129,7 +129,7 @@ void PubHandler::OnLivoxLidarPointCloudCallback(uint32_t handle, const uint8_t d
   RawPacket packet = {};
   packet.handle = handle;
   packet.lidar_type = LidarProtoType::kLivoxLidarType;
-  packet.extrinsic_enable = false; 
+  packet.extrinsic_applied_by_device = false;
   if (dev_type == LivoxLidarDeviceType::kLivoxLidarTypeIndustrialHAP) {
     packet.line_num = kLineNumberHAP;
   } else if (dev_type == LivoxLidarDeviceType::kLivoxLidarTypeMid360||dev_type==LivoxLidarDeviceType::kLivoxLidarTypeMid360s) {
@@ -370,7 +370,7 @@ void LidarPubHandler::ProcessCartesianHighPoint(RawPacket & pkt) {
   LivoxLidarCartesianHighRawPoint* raw = (LivoxLidarCartesianHighRawPoint*)pkt.raw_data.data();
   PointXyzlt point = {};
   for (uint32_t i = 0; i < pkt.point_num; i++) {
-    if (pkt.extrinsic_enable) {
+    if (pkt.extrinsic_applied_by_device) {
       point.x = raw[i].x / 1000.0;
       point.y = raw[i].y / 1000.0;
       point.z = raw[i].z / 1000.0;
@@ -398,7 +398,7 @@ void LidarPubHandler::ProcessCartesianLowPoint(RawPacket & pkt) {
   LivoxLidarCartesianLowRawPoint* raw = (LivoxLidarCartesianLowRawPoint*)pkt.raw_data.data();
   PointXyzlt point = {};
   for (uint32_t i = 0; i < pkt.point_num; i++) {
-    if (pkt.extrinsic_enable) {
+    if (pkt.extrinsic_applied_by_device) {
       point.x = raw[i].x / 100.0;
       point.y = raw[i].y / 100.0;
       point.z = raw[i].z / 100.0;
@@ -432,7 +432,7 @@ void LidarPubHandler::ProcessSphericalPoint(RawPacket& pkt) {
     double src_x = radius * sin(theta) * cos(phi);
     double src_y = radius * sin(theta) * sin(phi);
     double src_z = radius * cos(theta);
-    if (pkt.extrinsic_enable) {
+    if (pkt.extrinsic_applied_by_device) {
       point.x = src_x;
       point.y = src_y;
       point.z = src_z;
@@ -465,7 +465,7 @@ void LidarPubHandler::ProcessDoubleEchoPoint(RawPacket& pkt)
   PointXyzlt point2 = {};
   uint32_t index = 0;
   for (uint32_t i = 0; i < pkt.point_num; i++) {
-    if (pkt.extrinsic_enable) {
+    if (pkt.extrinsic_applied_by_device) {
       point1.x = raw[i].x1 / 1000.0;
       point1.y = raw[i].y1 / 1000.0;
       point1.z = raw[i].z1 / 1000.0;

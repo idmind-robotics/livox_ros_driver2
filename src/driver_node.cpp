@@ -32,10 +32,19 @@ DriverNode& DriverNode::GetNode() noexcept {
 }
 
 DriverNode::~DriverNode() {
-  lddc_ptr_->lds_->RequestExit();
+  // Signal first, so a thread woken by RequestExit() sees a ready future on its
+  // next loop check and leaves instead of spinning through Distribute*().
   exit_signal_.set_value();
-  pointclouddata_poll_thread_->join();
-  imudata_poll_thread_->join();
+  // Lddc::PrepareExit() nulls lds_, so this can run after the source is gone.
+  if (lddc_ptr_ && lddc_ptr_->lds_) {
+    lddc_ptr_->lds_->RequestExit();
+  }
+  if (pointclouddata_poll_thread_ && pointclouddata_poll_thread_->joinable()) {
+    pointclouddata_poll_thread_->join();
+  }
+  if (imudata_poll_thread_ && imudata_poll_thread_->joinable()) {
+    imudata_poll_thread_->join();
+  }
 }
 
 } // namespace livox_ros

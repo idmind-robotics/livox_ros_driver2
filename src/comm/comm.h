@@ -193,7 +193,9 @@ typedef struct {
 typedef struct {
   LidarProtoType lidar_type;
   uint32_t handle;
-  bool extrinsic_enable;
+  /** True when the LiDAR already applied the install attitude itself, so the
+      driver must not apply the extrinsic a second time. */
+  bool extrinsic_applied_by_device;
   uint32_t point_num;
   uint8_t data_type;
   uint8_t line_num;
