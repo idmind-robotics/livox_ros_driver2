@@ -25,7 +25,6 @@ add_definitions(-DBUILDING_ROS2)
 # find dependencies
 find_package(ament_cmake_auto REQUIRED)
 ament_auto_find_build_dependencies()
-find_package(PCL REQUIRED)
 find_package(std_msgs REQUIRED)
 find_package(builtin_interfaces REQUIRED)
 find_package(rosidl_default_generators REQUIRED)
@@ -52,10 +51,6 @@ find_library(LIVOX_LIDAR_SDK_LIBRARY liblivox_lidar_sdk_shared.so /usr/local/lib
 find_path(LIVOX_LIDAR_SDK_INCLUDE_DIR
   NAMES "livox_lidar_api.h" "livox_lidar_def.h"
   REQUIRED)
-
-## PCL library
-link_directories(${PCL_LIBRARY_DIRS})
-add_definitions(${PCL_DEFINITIONS})
 
 # livox ros2 driver target
 ament_auto_add_library(${PROJECT_NAME} SHARED
@@ -85,7 +80,6 @@ rosidl_get_typesupport_target(cpp_typesupport_target
 target_link_libraries(${PROJECT_NAME} "${cpp_typesupport_target}")
 
 target_include_directories(${PROJECT_NAME} PUBLIC
-  ${PCL_INCLUDE_DIRS}
   ${APR_INCLUDE_DIRS}
   ${LIVOX_LIDAR_SDK_INCLUDE_DIR}
   3rdparty
@@ -94,7 +88,6 @@ target_include_directories(${PROJECT_NAME} PUBLIC
 
 target_link_libraries(${PROJECT_NAME}
   ${LIVOX_LIDAR_SDK_LIBRARY}
-  ${PCL_LIBRARIES}
   ${APR_LIBRARIES}
 )
 

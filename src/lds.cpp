@@ -122,29 +122,6 @@ void Lds::StorageImuData(ImuData* imu_data) {
   }
 }
 
-void Lds::StorageLvxPointData(PointFrame* frame) {
-  if (frame == nullptr) {
-    return;
-  }
-
-  uint8_t lidar_number = frame->lidar_num;
-  for (uint i = 0; i < lidar_number; ++i) {
-    PointPacket& lidar_point = frame->lidar_point[i];
-
-    uint64_t base_time = frame->base_time[i];
-    uint8_t index = 0;
-    int8_t ret = cache_index_.LvxGetIndex(lidar_point.lidar_type, lidar_point.handle, index);
-    if (ret != 0) {
-      printf("Storage lvx point data failed, lidar type:%u, device num:%u.\n", lidar_point.lidar_type, lidar_point.handle);
-      continue;
-    }
-
-    lidars_[index].connect_state = kConnectStateSampling;
-
-    PushLidarData(&lidar_point, index, base_time);
-  }
-}
-
 void Lds::StoragePointData(PointFrame* frame) {
   if (frame == nullptr) {
     return;
