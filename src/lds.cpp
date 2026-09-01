@@ -48,7 +48,7 @@ Lds::Lds(const double publish_freq, const uint8_t data_src)
 
 Lds::~Lds() {
   ResetLds(0);
-  printf("lds destory!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n");
+  RCLCPP_INFO(DRIVER_LOGGER, "lds destory!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
 }
 
 void Lds::ResetLidar(LidarDevice *lidar, uint8_t data_src) {
@@ -103,14 +103,14 @@ void Lds::StorageImuData(ImuData* imu_data) {
   if (imu_data->lidar_type == kLivoxLidarType) {
     device_num = imu_data->handle;
   } else {
-    printf("Storage imu data failed, unknown lidar type:%u.\n", imu_data->lidar_type);
+    RCLCPP_ERROR(DRIVER_LOGGER, "Storage imu data failed, unknown lidar type:%u.", imu_data->lidar_type);
     return;
   }
 
   uint8_t index = 0;
   int ret = cache_index_.GetIndex(imu_data->lidar_type, device_num, index);
   if (ret != 0) {
-    printf("Storage point data failed, can not get index, lidar type:%u, device_num:%u.\n", imu_data->lidar_type, device_num);
+    RCLCPP_ERROR(DRIVER_LOGGER, "Storage point data failed, can not get index, lidar type:%u, device_num:%u.", imu_data->lidar_type, device_num);
     return;
   }
 
@@ -132,14 +132,14 @@ void Lds::StoragePointData(PointFrame* frame) {
   uint8_t lidar_number = frame->lidar_num;
   for (uint i = 0; i < lidar_number; ++i) {
     PointPacket& lidar_point = frame->lidar_point[i];
-    //printf("StoragePointData, lidar_type:%u, point_num:%lu.\n", lidar_point.lidar_type, lidar_point.points_num);
+    //RCLCPP_INFO(DRIVER_LOGGER, "StoragePointData, lidar_type:%u, point_num:%lu.", lidar_point.lidar_type, lidar_point.points_num);
 
     uint64_t base_time = frame->base_time[i];
 
     uint8_t index = 0;
     int8_t ret = cache_index_.GetIndex(lidar_point.lidar_type, lidar_point.handle, index);
     if (ret != 0) {
-      printf("Storage point data failed, lidar type:%u, handle:%u.\n", lidar_point.lidar_type, lidar_point.handle);
+      RCLCPP_ERROR(DRIVER_LOGGER, "Storage point data failed, lidar type:%u, handle:%u.", lidar_point.lidar_type, lidar_point.handle);
       continue;
     }
     PushLidarData(&lidar_point, index, base_time);
@@ -157,7 +157,7 @@ void Lds::PushLidarData(PointPacket* lidar_data, const uint8_t index, const uint
   if (nullptr == queue->storage_packet) {
     uint32_t queue_size = CalculatePacketQueueSize(publish_freq_);
     InitQueue(queue, queue_size);
-    printf("Lidar[%u] storage queue size: %u\n", index, queue_size);
+    RCLCPP_INFO(DRIVER_LOGGER, "Lidar[%u] storage queue size: %u", index, queue_size);
   }
 
   if (!QueueIsFull(queue)) {

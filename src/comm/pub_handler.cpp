@@ -313,7 +313,7 @@ void LidarPubHandler::PointCloudProcess(RawPacket & pkt) {
   } else {
     static bool flag = false;
     if (!flag) {
-      std::cout << "error, unsupported protocol type: " << static_cast<int>(pkt.lidar_type) << std::endl;
+      RCLCPP_ERROR_STREAM(DRIVER_LOGGER, "error, unsupported protocol type: " << static_cast<int>(pkt.lidar_type));
       flag = true;      
     }
   }
@@ -335,8 +335,8 @@ void LidarPubHandler::LivoxLidarPointCloudProcess(RawPacket & pkt) {
       ProcessDoubleEchoPoint(pkt);
       break;
     default:
-      std::cout << "unknown data type: " << static_cast<int>(pkt.data_type)
-                << " !!" << std::endl;
+      RCLCPP_ERROR_STREAM(DRIVER_LOGGER, "unknown data type: " << static_cast<int>(pkt.data_type)
+                << " !!");
       break;
   }
 }

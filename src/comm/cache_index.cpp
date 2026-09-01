@@ -46,7 +46,7 @@ int8_t CacheIndex::GetFreeIndex(const uint8_t livox_lidar_type, const uint32_t h
   }
 
   {
-    printf("GetFreeIndex key:%s.\n", key.c_str());
+    RCLCPP_INFO(DRIVER_LOGGER, "GetFreeIndex key:%s.", key.c_str());
     for (size_t i = 0; i < index_cache_.size(); ++i) {
       if (!index_cache_[i]) {
         index_cache_[i] = 1;
@@ -63,7 +63,7 @@ int8_t CacheIndex::GenerateIndexKey(const uint8_t livox_lidar_type, const uint32
   if (livox_lidar_type == kLivoxLidarType) {
     key = "livox_lidar_" + std::to_string(handle);
   } else {
-    printf("Can not generate index, the livox lidar type is unknown, the livox lidar type:%u\n", livox_lidar_type);
+    RCLCPP_ERROR(DRIVER_LOGGER, "Can not generate index, the livox lidar type is unknown, the livox lidar type:%u", livox_lidar_type);
     return -1;
   }
   return 0;
@@ -82,7 +82,7 @@ int8_t CacheIndex::GetIndex(const uint8_t livox_lidar_type, const uint32_t handl
     index = it->second;
     return 0;
   }
-  printf("Can not get index, the livox lidar type:%u, handle:%u\n", livox_lidar_type, handle);
+  RCLCPP_ERROR(DRIVER_LOGGER, "Can not get index, the livox lidar type:%u, handle:%u", livox_lidar_type, handle);
   return -1;
 }
 
@@ -90,7 +90,7 @@ void CacheIndex::ResetIndex(LidarDevice *lidar) {
   std::string key;
   int8_t ret = GenerateIndexKey(lidar->lidar_type, lidar->handle, key);
   if (ret != 0) {
-    printf("Reset index failed, can not generate index key, lidar type:%u, handle:%u.\n", lidar->lidar_type, lidar->handle);
+    RCLCPP_ERROR(DRIVER_LOGGER, "Reset index failed, can not generate index key, lidar type:%u, handle:%u.", lidar->lidar_type, lidar->handle);
     return;
   }
 

@@ -78,7 +78,7 @@ void LdsLidar::ResetLdsLidar(void) { ResetLds(kSourceRawLidar); }
 
 bool LdsLidar::InitLdsLidar(const std::string& path_name) {
   if (is_initialized_) {
-    printf("Lds is already inited!\n");
+    RCLCPP_INFO(DRIVER_LOGGER, "Lds is already inited!");
     return false;
   }
 
@@ -102,7 +102,7 @@ bool LdsLidar::InitLidars() {
   if (!ParseSummaryConfig()) {
     return false;
   }
-  std::cout << "config lidar type: " << static_cast<int>(lidar_summary_info_.lidar_type) << std::endl;
+  RCLCPP_INFO_STREAM(DRIVER_LOGGER, "config lidar type: " << static_cast<int>(lidar_summary_info_.lidar_type));
 
   if (lidar_summary_info_.lidar_type & kLivoxLidarType) {
     if (!InitLivoxLidar()) {
@@ -133,12 +133,12 @@ bool LdsLidar::InitLivoxLidar() {
   LivoxLidarConfigParser parser(path_);
   std::vector<UserLivoxLidarConfig> user_configs;
   if (!parser.Parse(user_configs)) {
-    std::cout << "failed to parse user-defined config" << std::endl;
+    RCLCPP_ERROR_STREAM(DRIVER_LOGGER, "failed to parse user-defined config");
   }
 
   // SDK initialization
   if (!LivoxLidarSdkInit(path_.c_str())) {
-    std::cout << "Failed to init livox lidar sdk." << std::endl;
+    RCLCPP_ERROR_STREAM(DRIVER_LOGGER, "Failed to init livox lidar sdk.");
     return false;
   }
 
@@ -147,7 +147,7 @@ bool LdsLidar::InitLivoxLidar() {
     uint8_t index = 0;
     int8_t ret = g_lds_ldiar->cache_index_.GetFreeIndex(kLivoxLidarType, config.handle, index);
     if (ret != 0) {
-      std::cout << "failed to get free index, lidar ip: " << IpNumToString(config.handle) << std::endl;
+      RCLCPP_ERROR_STREAM(DRIVER_LOGGER, "failed to get free index, lidar ip: " << IpNumToString(config.handle));
       continue;
     }
     LidarDevice *p_lidar = &(g_lds_ldiar->lidars_[index]);
@@ -195,13 +195,13 @@ bool LdsLidar::LivoxLidarStart() {
 
 int LdsLidar::DeInitLdsLidar(void) {
   if (!is_initialized_) {
-    printf("LiDAR data source is not exit");
+    RCLCPP_INFO(DRIVER_LOGGER, "LiDAR data source is not exit");
     return -1;
   }
 
   if (lidar_summary_info_.lidar_type & kLivoxLidarType) {
     LivoxLidarSdkUninit();
-    printf("Livox Lidar SDK Deinit completely!\n");
+    RCLCPP_INFO(DRIVER_LOGGER, "Livox Lidar SDK Deinit completely!");
   }
 
   return 0;

@@ -35,7 +35,7 @@ ParseCfgFile::ParseCfgFile(const std::string& path) : path_(path) {}
 bool ParseCfgFile::ParseSummaryInfo(LidarSummaryInfo& lidar_summary_info) {
   FILE* raw_file = std::fopen(path_.c_str(), "rb");
   if (!raw_file) {
-    std::cout << "parse summary info failed, can not open file: " << path_ << std::endl;
+    RCLCPP_ERROR_STREAM(DRIVER_LOGGER, "parse summary info failed, can not open file: " << path_);
     return false;
   }
 
@@ -58,7 +58,7 @@ bool ParseCfgFile::ParseSummaryInfo(LidarSummaryInfo& lidar_summary_info) {
     return true;
   } while (false);
 
-  std::cout << "parse lidar type failed." << std::endl;
+  RCLCPP_ERROR_STREAM(DRIVER_LOGGER, "parse lidar type failed.");
   std::fclose(raw_file);
   return false;
 }

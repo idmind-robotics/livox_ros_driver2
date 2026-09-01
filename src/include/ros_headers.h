@@ -46,7 +46,4 @@
 #define DRIVER_ERROR_EXTRA(node, EXTRA, ...) RCLCPP_ERROR_##EXTRA((node).get_logger(), __VA_ARGS__)
 #define DRIVER_FATAL_EXTRA(node, EXTRA, ...) RCLCPP_FATAL_##EXTRA((node).get_logger(), __VA_ARGS__)
 
-/** Logger for the classes below DriverNode, which hold no node handle. */
-#define DRIVER_LOGGER rclcpp::get_logger("livox_ros_driver2")
-
 #endif // ROS_HEADERS_H_

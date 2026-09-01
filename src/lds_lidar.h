@@ -43,7 +43,7 @@ namespace livox_ros {
 class LdsLidar final : public Lds {
  public:
   static LdsLidar *GetInstance(double publish_freq) {
-    printf("LdsLidar *GetInstance\n");
+    RCLCPP_INFO(DRIVER_LOGGER, "LdsLidar *GetInstance");
     static LdsLidar lds_lidar(publish_freq);
     return &lds_lidar;
   }

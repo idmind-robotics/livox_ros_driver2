@@ -40,14 +40,19 @@
 namespace livox_ros {
 
 /** Lidar Data Distribute Control--------------------------------------------*/
-Lddc::Lddc(int format, int multi_topic, int data_src, int output_type,
-           double frq, std::string &frame_id)
-    : transfer_format_(format),
-      use_multi_topic_(multi_topic),
-      data_src_(data_src),
-      output_type_(output_type),
-      publish_frq_(frq),
-      frame_id_(frame_id) {
+Lddc::Lddc(const LddcConfig &config)
+    : cfg_(config),
+      transfer_format_(config.transfer_format),
+      use_multi_topic_(config.multi_topic),
+      data_src_(config.data_src),
+      output_type_(config.output_type),
+      frame_id_(config.frame_id),
+      imu_frame_id_(config.imu_frame_id.empty() ? config.frame_id
+                                                : config.imu_frame_id) {
+  if (cfg_.imu_publish_freq > 0.0) {
+    imu_min_interval_ns_ =
+        static_cast<uint64_t>(kNsPerSecond / cfg_.imu_publish_freq);
+  }
   lds_ = nullptr;
 }
 
@@ -55,7 +60,7 @@ Lddc::~Lddc() {
 
   PrepareExit();
 
-  std::cout << "lddc destory!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!" << std::endl;
+  RCLCPP_INFO(DRIVER_LOGGER, "Lddc shut down.");
 }
 
 int Lddc::RegisterLds(Lds *lds) {
@@ -69,11 +74,11 @@ int Lddc::RegisterLds(Lds *lds) {
 
 void Lddc::DistributePointCloudData(void) {
   if (!lds_) {
-    std::cout << "lds is not registered" << std::endl;
+    RCLCPP_INFO_STREAM(DRIVER_LOGGER, "lds is not registered");
     return;
   }
   if (lds_->IsRequestExit()) {
-    std::cout << "DistributePointCloudData is RequestExit" << std::endl;
+    RCLCPP_INFO_STREAM(DRIVER_LOGGER, "DistributePointCloudData is RequestExit");
     return;
   }
   
@@ -94,11 +99,11 @@ void Lddc::DistributePointCloudData(void) {
 
 void Lddc::DistributeImuData(void) {
   if (!lds_) {
-    std::cout << "lds is not registered" << std::endl;
+    RCLCPP_INFO_STREAM(DRIVER_LOGGER, "lds is not registered");
     return;
   }
   if (lds_->IsRequestExit()) {
-    std::cout << "DistributeImuData is RequestExit" << std::endl;
+    RCLCPP_INFO_STREAM(DRIVER_LOGGER, "DistributeImuData is RequestExit");
     return;
   }
   
@@ -151,7 +156,7 @@ void Lddc::PublishPointcloud2(LidarDataQueue *queue, uint8_t index) {
     StoragePacket pkg;
     QueuePop(queue, &pkg);
     if (pkg.points.empty()) {
-      printf("Publish point cloud2 failed, the pkg points is empty.\n");
+      RCLCPP_ERROR(DRIVER_LOGGER, "Publish point cloud2 failed, the pkg points is empty.");
       continue;
     }
 
@@ -167,7 +172,7 @@ void Lddc::PublishCustomPointcloud(LidarDataQueue *queue, uint8_t index) {
     StoragePacket pkg;
     QueuePop(queue, &pkg);
     if (pkg.points.empty()) {
-      printf("Publish custom point cloud failed, the pkg points is empty.\n");
+      RCLCPP_ERROR(DRIVER_LOGGER, "Publish custom point cloud failed, the pkg points is empty.");
       continue;
     }
 
@@ -229,7 +234,7 @@ void Lddc::InitPointcloud2Msg(const StoragePacket& pkg, PointCloud2& cloud, uint
     timestamp = pkg.base_time;
   }
 
-      cloud.header.stamp = rclcpp::Time(timestamp);
+      cloud.header.stamp = StampFor(timestamp);
 
   std::vector<LivoxPointXyzrtlt> points;
   for (size_t i = 0; i < pkg.points_num; ++i) {
@@ -267,13 +272,13 @@ void Lddc::InitCustomMsg(CustomMsg& livox_msg, const StoragePacket& pkg, uint8_t
   }
   livox_msg.timebase = timestamp;
 
-  livox_msg.header.stamp = rclcpp::Time(timestamp);
+  livox_msg.header.stamp = StampFor(timestamp);
 
   livox_msg.point_num = pkg.points_num;
   if (lds_->lidars_[index].lidar_type == kLivoxLidarType) {
     livox_msg.lidar_id = lds_->lidars_[index].handle;
   } else {
-    printf("Init custom msg lidar id failed, the index:%u.\n", index);
+    RCLCPP_ERROR(DRIVER_LOGGER, "Init custom msg lidar id failed, the index:%u.", index);
     livox_msg.lidar_id = 0;
   }
 }
@@ -305,10 +310,10 @@ void Lddc::PublishCustomPointData(const CustomMsg& livox_msg, const uint8_t inde
 }
 
 void Lddc::InitImuMsg(const ImuData& imu_data, ImuMsg& imu_msg, uint64_t& timestamp) {
-  imu_msg.header.frame_id = "livox_frame";
+  imu_msg.header.frame_id = imu_frame_id_;
 
   timestamp = imu_data.time_stamp;
-  imu_msg.header.stamp = rclcpp::Time(timestamp);  // to ros time stamp
+  imu_msg.header.stamp = StampFor(timestamp);
 
   imu_msg.angular_velocity.x = imu_data.gyro_x;
   imu_msg.angular_velocity.y = imu_data.gyro_y;
@@ -321,8 +326,17 @@ void Lddc::InitImuMsg(const ImuData& imu_data, ImuMsg& imu_msg, uint64_t& timest
 void Lddc::PublishImuData(LidarImuDataQueue& imu_data_queue, const uint8_t index) {
   ImuData imu_data;
   if (!imu_data_queue.Pop(imu_data)) {
-    //printf("Publish imu data failed, imu data queue pop failed.\n");
+    //RCLCPP_ERROR(DRIVER_LOGGER, "Publish imu data failed, imu data queue pop failed.");
     return;
+  }
+
+  if (imu_min_interval_ns_ != 0) {
+    const uint64_t last = last_imu_pub_ns_[index];
+    if (last != 0 && imu_data.time_stamp > last &&
+        imu_data.time_stamp - last < imu_min_interval_ns_) {
+      return;
+    }
+    last_imu_pub_ns_[index] = imu_data.time_stamp;
   }
 
   ImuMsg imu_msg;
@@ -337,46 +351,68 @@ void Lddc::PublishImuData(LidarImuDataQueue& imu_data_queue, const uint8_t index
   }
 }
 
+std::string Lddc::MakeTopicName(const std::string &base, uint8_t index) const {
+  if (!use_multi_topic_) {
+    return base;
+  }
+  const std::string ip = IpNumToString(lds_->lidars_[index].handle);
+  return base + "_" + ReplacePeriodByUnderline(ip);
+}
+
+rclcpp::QoS Lddc::MakeQos(bool shared) const {
+  // Historical depths: 64 per lidar, 256 on the shared topic.
+  const int depth = cfg_.qos_depth > 0
+      ? cfg_.qos_depth
+      : static_cast<int>(kMinEthPacketQueueSize * (shared ? 8 : 2));
+  rclcpp::QoS qos{rclcpp::KeepLast(static_cast<size_t>(depth))};
+  if (cfg_.qos_best_effort) {
+    qos.best_effort();
+  } else {
+    qos.reliable();
+  }
+  return qos;
+}
+
+rclcpp::Time Lddc::StampFor(uint64_t lidar_timestamp_ns) const {
+  if (cfg_.stamp_with_ros_time) {
+    return cur_node_->now();
+  }
+  return rclcpp::Time(lidar_timestamp_ns);
+}
+
 std::shared_ptr<rclcpp::PublisherBase> Lddc::CreatePublisher(uint8_t msg_type,
     std::string &topic_name, uint32_t queue_size) {
+    const rclcpp::QoS qos = MakeQos(!use_multi_topic_);
+    (void)queue_size;
     if (kPointCloud2Msg == msg_type) {
       DRIVER_INFO(*cur_node_,
           "%s publish use PointCloud2 format", topic_name.c_str());
-      return cur_node_->create_publisher<PointCloud2>(topic_name, queue_size);
+      return cur_node_->create_publisher<PointCloud2>(topic_name, qos);
     } else if (kLivoxCustomMsg == msg_type) {
       DRIVER_INFO(*cur_node_,
           "%s publish use livox custom format", topic_name.c_str());
-      return cur_node_->create_publisher<CustomMsg>(topic_name, queue_size);
+      return cur_node_->create_publisher<CustomMsg>(topic_name, qos);
     } else if (kLivoxImuMsg == msg_type)  {
       DRIVER_INFO(*cur_node_,
           "%s publish use imu format", topic_name.c_str());
-      return cur_node_->create_publisher<ImuMsg>(topic_name,
-          queue_size);
-    } else {
-      PublisherPtr null_publisher(nullptr);
-      return null_publisher;
+      return cur_node_->create_publisher<ImuMsg>(topic_name, qos);
     }
+    DRIVER_ERROR(*cur_node_, "No publisher for message type %u on %s",
+        msg_type, topic_name.c_str());
+    return PublisherPtr(nullptr);
 }
 
 std::shared_ptr<rclcpp::PublisherBase> Lddc::GetCurrentPublisher(uint8_t handle) {
   uint32_t queue_size = kMinEthPacketQueueSize;
   if (use_multi_topic_) {
     if (!private_pub_[handle]) {
-      char name_str[48];
-      memset(name_str, 0, sizeof(name_str));
-
-      std::string ip_string = IpNumToString(lds_->lidars_[handle].handle);
-      snprintf(name_str, sizeof(name_str), "livox/lidar_%s",
-          ReplacePeriodByUnderline(ip_string).c_str());
-      std::string topic_name(name_str);
-      queue_size = queue_size * 2; // queue size is 64 for only one lidar
+      std::string topic_name = MakeTopicName(cfg_.lidar_topic, handle);
       private_pub_[handle] = CreatePublisher(transfer_format_, topic_name, queue_size);
     }
     return private_pub_[handle];
   } else {
     if (!global_pub_) {
-      std::string topic_name("livox/lidar");
-      queue_size = queue_size * 8; // shared queue size is 256, for all lidars
+      std::string topic_name = cfg_.lidar_topic;
       global_pub_ = CreatePublisher(transfer_format_, topic_name, queue_size);
     }
     return global_pub_;
@@ -387,21 +423,14 @@ std::shared_ptr<rclcpp::PublisherBase> Lddc::GetCurrentImuPublisher(uint8_t hand
   uint32_t queue_size = kMinEthPacketQueueSize;
   if (use_multi_topic_) {
     if (!private_imu_pub_[handle]) {
-      char name_str[48];
-      memset(name_str, 0, sizeof(name_str));
-      std::string ip_string = IpNumToString(lds_->lidars_[handle].handle);
-      snprintf(name_str, sizeof(name_str), "livox/imu_%s",
-          ReplacePeriodByUnderline(ip_string).c_str());
-      std::string topic_name(name_str);
-      queue_size = queue_size * 2; // queue size is 64 for only one lidar
+      std::string topic_name = MakeTopicName(cfg_.imu_topic, handle);
       private_imu_pub_[handle] = CreatePublisher(kLivoxImuMsg, topic_name,
           queue_size);
     }
     return private_imu_pub_[handle];
   } else {
     if (!global_imu_pub_) {
-      std::string topic_name("livox/imu");
-      queue_size = queue_size * 8; // shared queue size is 256, for all lidars
+      std::string topic_name = cfg_.imu_topic;
       global_imu_pub_ = CreatePublisher(kLivoxImuMsg, topic_name, queue_size);
     }
     return global_imu_pub_;

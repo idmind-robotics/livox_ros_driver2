@@ -32,7 +32,7 @@
 
 namespace livox_ros {
 
-/** Send pointcloud message Data to ros subscriber or save them in rosbag file */
+/** Where published messages go. Only kOutputToRos is supported in ROS2. */
 typedef enum {
   kOutputToRos = 0,
   kOutputToRosBagFile = 1,
@@ -56,10 +56,31 @@ using ImuMsg = sensor_msgs::msg::Imu;
 
 class DriverNode;
 
+/** Everything DriverNode reads from parameters and hands to Lddc. Defaults here
+    are the driver's historical behaviour, so an unset parameter changes nothing. */
+struct LddcConfig {
+  int transfer_format = kPointCloud2Msg;
+  int multi_topic = 0;
+  int data_src = kSourceRawLidar;
+  int output_type = kOutputToRos;
+  double publish_freq = 10.0;
+  std::string frame_id = "livox_frame";
+  /** Empty means "same as frame_id". */
+  std::string imu_frame_id;
+  std::string lidar_topic = "livox/lidar";
+  std::string imu_topic = "livox/imu";
+  /** 0 keeps the historical 64 (per-lidar) / 256 (shared) depths. */
+  int qos_depth = 0;
+  bool qos_best_effort = false;
+  /** Stamp messages with the node clock instead of the lidar timestamp. */
+  bool stamp_with_ros_time = false;
+  /** <= 0 publishes every IMU sample, as before. */
+  double imu_publish_freq = 0.0;
+};
+
 class Lddc final {
  public:
-  Lddc(int format, int multi_topic, int data_src, int output_type, double frq,
-      std::string &frame_id);
+  explicit Lddc(const LddcConfig &config);
   ~Lddc();
 
   int RegisterLds(Lds *lds);
@@ -70,8 +91,6 @@ class Lddc final {
   uint8_t GetTransferFormat(void) { return transfer_format_; }
   uint8_t IsMultiTopic(void) { return use_multi_topic_; }
   void SetRosNode(livox_ros::DriverNode *node) { cur_node_ = node; }
-
-  void SetPublishFrq(uint32_t frq) { publish_frq_ = frq; }
 
  public:
   Lds *lds_;
@@ -103,21 +122,31 @@ class Lddc final {
   PublisherPtr GetCurrentPublisher(uint8_t index);
   PublisherPtr GetCurrentImuPublisher(uint8_t index);
 
+  /** Topic name for a lidar slot: the configured base, plus the device IP when
+      multi-topic mode is on. */
+  std::string MakeTopicName(const std::string &base, uint8_t index) const;
+  rclcpp::QoS MakeQos(bool shared) const;
+  /** Stamp for a message, honouring the timestamp_source parameter. */
+  rclcpp::Time StampFor(uint64_t lidar_timestamp_ns) const;
+
  private:
+  LddcConfig cfg_;
   uint8_t transfer_format_;
   uint8_t use_multi_topic_;
   uint8_t data_src_;
   uint8_t output_type_;
-  double publish_frq_;
-  uint32_t publish_period_ns_;
   std::string frame_id_;
+  std::string imu_frame_id_;
+  /** Minimum spacing between published IMU samples, per lidar; 0 = unthrottled. */
+  uint64_t imu_min_interval_ns_ = 0;
+  uint64_t last_imu_pub_ns_[kMaxSourceLidar] = {};
 
   PublisherPtr private_pub_[kMaxSourceLidar];
   PublisherPtr global_pub_;
   PublisherPtr private_imu_pub_[kMaxSourceLidar];
   PublisherPtr global_imu_pub_;
 
-  livox_ros::DriverNode *cur_node_;
+  livox_ros::DriverNode *cur_node_ = nullptr;
 };
 
 }  // namespace livox_ros

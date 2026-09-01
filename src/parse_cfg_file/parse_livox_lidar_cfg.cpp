@@ -30,7 +30,7 @@ namespace livox_ros {
 bool LivoxLidarConfigParser::Parse(std::vector<UserLivoxLidarConfig> &lidar_configs) {
   FILE* raw_file = std::fopen(path_.c_str(), "rb");
   if (!raw_file) {
-    std::cout << "failed to open config file: " << path_ << std::endl;
+    RCLCPP_ERROR_STREAM(DRIVER_LOGGER, "failed to open config file: " << path_);
     return false;
   }
 
@@ -42,17 +42,17 @@ bool LivoxLidarConfigParser::Parse(std::vector<UserLivoxLidarConfig> &lidar_conf
 
   do {
     if (doc.ParseStream(config_file).HasParseError()) {
-      std::cout << "failed to parse config jason" << std::endl;
+      RCLCPP_ERROR_STREAM(DRIVER_LOGGER, "failed to parse config jason");
       break;
     }
     if (!doc.HasMember("lidar_configs") ||
         !doc["lidar_configs"].IsArray() ||
         0 == doc["lidar_configs"].Size()) {
-      std::cout << "there is no user-defined config" << std::endl;
+      RCLCPP_INFO_STREAM(DRIVER_LOGGER, "there is no user-defined config");
       break;
     }
     if (!ParseUserConfigs(doc, lidar_configs)) {
-      std::cout << "failed to parse basic configs" << std::endl;
+      RCLCPP_ERROR_STREAM(DRIVER_LOGGER, "failed to parse basic configs");
       break;
     }
     ok = true;
@@ -99,8 +99,8 @@ bool LivoxLidarConfigParser::ParseUserConfigs(const rapidjson::Document &doc,
       auto &value = config["extrinsic_parameter"];
       if (!ParseExtrinsics(value, user_config.extrinsic_param)) {
         memset(&user_config.extrinsic_param, 0, sizeof(user_config.extrinsic_param));
-        std::cout << "failed to parse extrinsic parameters, ip: "
-                  << IpNumToString(user_config.handle) << std::endl;
+        RCLCPP_ERROR_STREAM(DRIVER_LOGGER, "failed to parse extrinsic parameters, ip: "
+                  << IpNumToString(user_config.handle));
       }
     }
     user_config.set_bits = 0;
@@ -110,11 +110,11 @@ bool LivoxLidarConfigParser::ParseUserConfigs(const rapidjson::Document &doc,
   }
 
   if (0 == user_configs.size()) {
-    std::cout << "no valid base configs" << std::endl;
+    RCLCPP_INFO_STREAM(DRIVER_LOGGER, "no valid base configs");
     return false;
   }
-  std::cout << "successfully parse base config, counts: "
-            << user_configs.size() << std::endl;
+  RCLCPP_INFO_STREAM(DRIVER_LOGGER, "successfully parse base config, counts: "
+            << user_configs.size());
   return true;
 }
 

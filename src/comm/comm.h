@@ -32,6 +32,8 @@
 
 #include <iostream>
 #include <string>
+#include <rclcpp/logging.hpp>
+
 #include <atomic>
 #include <vector>
 #include <memory>
@@ -40,6 +42,10 @@
 #include "lidar_imu_data_queue.h"
 
 namespace livox_ros {
+
+/** Logger for the classes below DriverNode, which hold no node handle. */
+#define DRIVER_LOGGER rclcpp::get_logger("livox_ros_driver2")
+
 
 /** Max lidar data source num */
 const uint8_t kMaxSourceLidar = 32;

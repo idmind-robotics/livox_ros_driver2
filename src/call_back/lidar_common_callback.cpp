@@ -32,34 +32,34 @@ namespace livox_ros {
 
 void LidarCommonCallback::OnLidarPointClounCb(PointFrame* frame, void* client_data) {
   if (frame == nullptr) {
-    printf("LidarPointCloudCb frame is nullptr.\n");
+    RCLCPP_INFO(DRIVER_LOGGER, "LidarPointCloudCb frame is nullptr.");
     return;
   }
 
   if (client_data == nullptr) {
-    printf("Lidar point cloud cb failed, client data is nullptr.\n");
+    RCLCPP_ERROR(DRIVER_LOGGER, "Lidar point cloud cb failed, client data is nullptr.");
     return;
   }
 
   if (frame->lidar_num ==0) {
-    printf("LidarPointCloudCb lidar_num:%u.\n", frame->lidar_num);
+    RCLCPP_INFO(DRIVER_LOGGER, "LidarPointCloudCb lidar_num:%u.", frame->lidar_num);
     return;
   }
 
   LdsLidar *lds_lidar = static_cast<LdsLidar *>(client_data);
   
-  //printf("Lidar point cloud, lidar_num:%u.\n", frame->lidar_num);
+  //RCLCPP_INFO(DRIVER_LOGGER, "Lidar point cloud, lidar_num:%u.", frame->lidar_num);
 
   lds_lidar->StoragePointData(frame);
 }
 
 void LidarCommonCallback::LidarImuDataCallback(ImuData* imu_data, void *client_data) {
   if (imu_data == nullptr) {
-    printf("Imu data is nullptr.\n");
+    RCLCPP_INFO(DRIVER_LOGGER, "Imu data is nullptr.");
     return;
   }
   if (client_data == nullptr) {
-    printf("Lidar point cloud cb failed, client data is nullptr.\n");
+    RCLCPP_ERROR(DRIVER_LOGGER, "Lidar point cloud cb failed, client data is nullptr.");
     return;
   }
 

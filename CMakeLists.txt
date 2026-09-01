@@ -103,6 +103,7 @@ if(BUILD_TESTING)
   # Plain assert-based self-check for the extrinsic maths; no gtest needed.
   add_executable(test_extrinsic test/test_extrinsic.cpp)
   target_include_directories(test_extrinsic PRIVATE src)
+  target_link_libraries(test_extrinsic rclcpp::rclcpp)  # comm.h pulls in rclcpp logging
   add_test(NAME test_extrinsic COMMAND test_extrinsic)
 endif()
 
