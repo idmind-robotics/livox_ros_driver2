@@ -104,11 +104,33 @@ All internal parameters of Livox_ros_driver2 are in the launch file. Below are d
 | ------------ | ------------------------------------------------------------ | ------- |
 | publish_freq | Set the frequency of point cloud publish <br>Floating-point data type, recommended values 5.0, 10.0, 20.0, 50.0, etc. The maximum publish frequency is 100.0 Hz.| 10.0    |
 | multi_topic  | If the LiDAR device has an independent topic to publish pointcloud data<br>0 -- All LiDAR devices use the same topic to publish pointcloud data<br>1 -- Each LiDAR device has its own topic to publish point cloud data | 0       |
-| xfer_format  | Set pointcloud format<br>0 -- Livox pointcloud2(PointXYZRTLT) pointcloud format<br>1 -- Livox customized pointcloud format<br>2 -- Standard pointcloud2 (pcl :: PointXYZI) pointcloud format in the PCL library (just for ROS) | 0       |
+| xfer_format  | Set pointcloud format<br>0 -- Livox pointcloud2(PointXYZRTLT) pointcloud format<br>1 -- Livox customized pointcloud format | 0       |
+
+#### Parameters added in this fork
+
+Every one of these defaults to the driver's previous hardcoded behaviour, so an
+existing launch file that does not set them behaves exactly as before.
+
+| Parameter | Detailed description | Default |
+| --- | --- | --- |
+| imu_frame_id | `frame_id` for the IMU messages. Empty means "same as `frame_id`". Previously the IMU frame was the literal `livox_frame` regardless of `frame_id`, which put the cloud and the IMU in different frames. | `''` |
+| imu_publish_freq | Maximum IMU publish rate in Hz. `0.0` publishes every sample the device sends (~200 Hz). | 0.0 |
+| lidar_topic | Base topic for point cloud data. With `multi_topic:=1` the device IP is appended, e.g. `livox/lidar_192_168_1_12`. | `livox/lidar` |
+| imu_topic | Base topic for IMU data, same suffix rule. | `livox/imu` |
+| qos_reliability | `reliable` or `best_effort`. `best_effort` matches RViz's default subscription QoS and suits high-rate cloud over Ethernet. | `reliable` |
+| qos_depth | Publisher queue depth. `0` keeps the historical depths (64 per-lidar, 256 shared). | 0 |
+| timestamp_source | `lidar` stamps messages with the device timestamp. `ros` stamps with the node clock, which is what you want under `use_sim_time`, or when the lidar is not PTP/GPS synchronised (the driver then falls back to a non-ROS clock). | `lidar` |
 
   **Note :**
 
-Other parameters not mentioned in this table are not suggested to be changed unless fully understood.
+`xfer_format:=2` (pcl::PointCloud), `output_data_type:=1` (rosbag) and
+`data_src` other than `0` were ROS1-only. They are now rejected at startup with
+an explanatory message, rather than being accepted and then publishing nothing.
+Use `ros2 bag record` for recording.
+
+  **Note :**
+
+Other parameters not mentioned in these tables are not suggested to be changed unless fully understood.
 
 &ensp;&ensp;&ensp;&ensp;***Livox_ros_driver2 pointcloud data detailed description :***
 
@@ -149,10 +171,6 @@ uint8   reflectivity    # reflectivity, 0~255
 uint8   tag             # livox tag
 uint8   line            # laser number in lidar
 ```
-
-3. The standard pointcloud2 (pcl :: PointXYZI) format in the PCL library (only ROS can publish):
-
-&ensp;&ensp;&ensp;&ensp;Please refer to the pcl :: PointXYZI data structure in the point_types.hpp file of the PCL library.
 
 ## 4. LiDAR config
 
@@ -435,6 +453,23 @@ For more infomation about the HAP config, please refer to:
 Then start one driver node per config, each with its own `user_config_path` and node name
 (see `launch/rviz_mixed_launch.py` for the pattern), setting `multi_topic` to 1 so each LiDAR
 publishes on its own topic.
+
+### 4.1 Extrinsic parameters
+
+The `extrinsic_parameter` block of the LiDAR config is applied by the **driver**,
+in software, when it converts raw points. The driver explicitly zeroes the
+device's own install attitude at startup so the transform is not applied twice -
+once on the device and once here - which is what happened previously. A
+consequence is that the driver clears any install attitude a previous run, or
+the vendor driver, left stored on the device.
+
+### 4.2 Composition
+
+The node is registered as a `rclcpp_components` component, but `LdsLidar` is a
+process-wide singleton, so **only one driver node per process is supported**.
+Loading two into one component container will silently share a single SDK
+instance. Run separate processes for multiple LiDARs, or use `multi_topic:=1`
+with one node and several entries in `lidar_configs`.
 
 ## 5. Supported LiDAR list
 

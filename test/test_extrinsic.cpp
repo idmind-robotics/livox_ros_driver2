@@ -1,3 +1,5 @@
+// Copyright 2026 IDMind
+//
 // Self-check for the extrinsic transform built by LidarPubHandler.
 //
 // The rotation matrix it builds is reproduced here rather than linked, because
