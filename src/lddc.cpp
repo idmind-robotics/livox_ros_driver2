@@ -48,7 +48,6 @@ Lddc::Lddc(int format, int multi_topic, int data_src, int output_type,
       output_type_(output_type),
       publish_frq_(frq),
       frame_id_(frame_id) {
-  publish_period_ns_ = kNsPerSecond / publish_frq_;
   lds_ = nullptr;
 }
 
@@ -82,7 +81,7 @@ void Lddc::DistributePointCloudData(void) {
   if (lds_->IsRequestExit()) {
     return;
   }
-  for (uint32_t i = 0; i < lds_->lidar_count_; i++) {
+  for (uint8_t i = 0; i < lds_->GetLidarCount(); i++) {
     uint32_t lidar_id = i;
     LidarDevice *lidar = &lds_->lidars_[lidar_id];
     LidarDataQueue *p_queue = &lidar->data;
@@ -107,7 +106,7 @@ void Lddc::DistributeImuData(void) {
   if (lds_->IsRequestExit()) {
     return;
   }
-  for (uint32_t i = 0; i < lds_->lidar_count_; i++) {
+  for (uint8_t i = 0; i < lds_->GetLidarCount(); i++) {
     uint32_t lidar_id = i;
     LidarDevice *lidar = &lds_->lidars_[lidar_id];
     LidarImuDataQueue *p_queue = &lidar->imu_data;

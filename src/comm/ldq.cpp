@@ -52,8 +52,8 @@ bool InitQueue(LidarDataQueue *queue, uint32_t queue_size) {
     return false;
   }
 
-  queue->rd_idx = 0;
-  queue->wr_idx = 0;
+  queue->rd_idx.store(0, std::memory_order_relaxed);
+  queue->wr_idx.store(0, std::memory_order_relaxed);
   queue->size = queue_size;
   queue->mask = queue_size - 1;
 
@@ -70,8 +70,8 @@ bool DeInitQueue(LidarDataQueue *queue) {
     delete[] queue->storage_packet;
   }
 
-  queue->rd_idx = 0;
-  queue->wr_idx = 0;
+  queue->rd_idx.store(0, std::memory_order_relaxed);
+  queue->wr_idx.store(0, std::memory_order_relaxed);
   queue->size = 0;
   queue->mask = 0;
 
@@ -79,8 +79,8 @@ bool DeInitQueue(LidarDataQueue *queue) {
 }
 
 void ResetQueue(LidarDataQueue *queue) {
-  queue->rd_idx = 0;
-  queue->wr_idx = 0;
+  queue->rd_idx.store(0, std::memory_order_relaxed);
+  queue->wr_idx.store(0, std::memory_order_relaxed);
 }
 
 bool QueuePrePop(LidarDataQueue *queue, StoragePacket *storage_packet) {
@@ -94,7 +94,9 @@ bool QueuePrePop(LidarDataQueue *queue, StoragePacket *storage_packet) {
     return false;
   }
 
-  uint32_t rd_idx = queue->rd_idx & queue->mask;
+  // acquire pairs with the release in QueuePushAny: the packet the index
+  // points at must be visible before we read it.
+  uint32_t rd_idx = queue->rd_idx.load(std::memory_order_relaxed) & queue->mask;
 
   storage_packet->base_time = queue->storage_packet[rd_idx].base_time;
   storage_packet->points_num = queue->storage_packet[rd_idx].points_num;
@@ -105,7 +107,7 @@ bool QueuePrePop(LidarDataQueue *queue, StoragePacket *storage_packet) {
 }
 
 void QueuePopUpdate(LidarDataQueue *queue) {
-  queue->rd_idx++;
+  queue->rd_idx.fetch_add(1, std::memory_order_release);
 }
 
 bool QueuePop(LidarDataQueue *queue, StoragePacket *storage_packet) {
@@ -118,7 +120,8 @@ bool QueuePop(LidarDataQueue *queue, StoragePacket *storage_packet) {
 }
 
 uint32_t QueueUsedSize(LidarDataQueue *queue) {
-  return queue->wr_idx - queue->rd_idx;
+  return queue->wr_idx.load(std::memory_order_acquire) -
+         queue->rd_idx.load(std::memory_order_acquire);
 }
 
 uint32_t QueueUnusedSize(LidarDataQueue *queue) {
@@ -126,15 +129,16 @@ uint32_t QueueUnusedSize(LidarDataQueue *queue) {
 }
 
 bool QueueIsFull(LidarDataQueue *queue) {
-  return ((queue->wr_idx - queue->rd_idx) > queue->mask);
+  return QueueUsedSize(queue) > queue->mask;
 }
 
 bool QueueIsEmpty(LidarDataQueue *queue) {
-  return (queue->rd_idx == queue->wr_idx);
+  return queue->rd_idx.load(std::memory_order_acquire) ==
+         queue->wr_idx.load(std::memory_order_acquire);
 }
 
 uint32_t QueuePushAny(LidarDataQueue *queue, uint8_t *data, const uint64_t base_time) {
-  uint32_t wr_idx = queue->wr_idx & queue->mask;
+  uint32_t wr_idx = queue->wr_idx.load(std::memory_order_relaxed) & queue->mask;
   PointPacket* lidar_point_data = reinterpret_cast<PointPacket*>(data);
   queue->storage_packet[wr_idx].base_time = base_time;
   queue->storage_packet[wr_idx].points_num = lidar_point_data->points_num;
@@ -143,7 +147,8 @@ uint32_t QueuePushAny(LidarDataQueue *queue, uint8_t *data, const uint64_t base_
   queue->storage_packet[wr_idx].points.resize(lidar_point_data->points_num);
   memcpy(queue->storage_packet[wr_idx].points.data(), lidar_point_data->points, sizeof(PointXyzlt) * (lidar_point_data->points_num));
 
-  queue->wr_idx++;
+  // release: publish the packet before the index that exposes it.
+  queue->wr_idx.fetch_add(1, std::memory_order_release);
   return 1;
 }
 

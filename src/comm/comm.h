@@ -32,6 +32,7 @@
 
 #include <iostream>
 #include <string>
+#include <atomic>
 #include <vector>
 #include <memory>
 #include <map>
@@ -196,6 +197,8 @@ typedef struct {
   /** True when the LiDAR already applied the install attitude itself, so the
       driver must not apply the extrinsic a second time. */
   bool extrinsic_applied_by_device;
+  /** True when this packet carries a PTP/gPTP or GPS synchronised timestamp. */
+  bool timestamp_synced;
   uint32_t point_num;
   uint8_t data_type;
   uint8_t line_num;
@@ -204,10 +207,13 @@ typedef struct {
   std::vector<uint8_t> raw_data;
 } RawPacket;
 
+/** Single-producer / single-consumer ring. The indices are atomic rather than
+    volatile: volatile orders nothing, so on a weakly-ordered CPU (ARM) the
+    consumer could observe a new index before the packet it points at. */
 typedef struct {
   StoragePacket *storage_packet;
-  volatile uint32_t rd_idx;
-  volatile uint32_t wr_idx;
+  std::atomic<uint32_t> rd_idx;
+  std::atomic<uint32_t> wr_idx;
   uint32_t mask;
   uint32_t size; /**< must be power of 2. */
 } LidarDataQueue;

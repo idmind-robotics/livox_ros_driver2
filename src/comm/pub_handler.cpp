@@ -31,8 +31,6 @@
 
 namespace livox_ros {
 
-std::atomic<bool> PubHandler::is_timestamp_sync_;
-
 PubHandler &pub_handler() {
   static PubHandler handler;
   return handler;
@@ -63,9 +61,8 @@ void PubHandler::RequestExit() {
 }
 
 void PubHandler::SetPointCloudConfig(const double publish_freq) {
-  publish_interval_ = (kNsPerSecond / (publish_freq * 10)) * 10;
+  publish_interval_ = static_cast<uint64_t>(kNsPerSecond / publish_freq);
   publish_interval_tolerance_ = publish_interval_ - kNsTolerantFrameTimeDeviation;
-  publish_interval_ms_ = publish_interval_ / kRatioOfMsToNs;
   if (!point_process_thread_) {
     point_process_thread_ = std::make_shared<std::thread>(&PubHandler::RawDataProcess, this);
   }
@@ -102,12 +99,6 @@ void PubHandler::OnLivoxLidarPointCloudCallback(uint32_t handle, const uint8_t d
     return;
   }
 
-  if (data->time_type != kTimestampTypeNoSync) {
-    is_timestamp_sync_.store(true);
-  } else {
-    is_timestamp_sync_.store(false);
-  }
-
   if (data->data_type == kLivoxLidarImuData) {
     if (self->imu_callback_) {
       RawImuPoint* imu = (RawImuPoint*) data->data;
@@ -130,6 +121,7 @@ void PubHandler::OnLivoxLidarPointCloudCallback(uint32_t handle, const uint8_t d
   packet.handle = handle;
   packet.lidar_type = LidarProtoType::kLivoxLidarType;
   packet.extrinsic_applied_by_device = false;
+  packet.timestamp_synced = (data->time_type != kTimestampTypeNoSync);
   if (dev_type == LivoxLidarDeviceType::kLivoxLidarTypeIndustrialHAP) {
     packet.line_num = kLineNumberHAP;
   } else if (dev_type == LivoxLidarDeviceType::kLivoxLidarTypeMid360||dev_type==LivoxLidarDeviceType::kLivoxLidarTypeMid360s) {
@@ -137,12 +129,19 @@ void PubHandler::OnLivoxLidarPointCloudCallback(uint32_t handle, const uint8_t d
   } else {
     packet.line_num = kLineNumberDefault;
   }
+  // The packet comes off the network, so validate before dividing by dot_num or
+  // trusting length: an empty or truncated packet used to divide by zero, or
+  // underflow the subtraction below and over-read past the buffer.
+  const size_t kHeaderSize = sizeof(LivoxLidarEthernetPacket) - 1;
+  if (data->dot_num == 0 || data->length < kHeaderSize) {
+    return;
+  }
   packet.data_type = data->data_type;
   packet.point_num = data->dot_num;
   packet.point_interval = data->time_interval * 100 / data->dot_num;  //ns
   packet.time_stamp = GetEthPacketTimestamp(data->time_type,
                                             data->timestamp, sizeof(data->timestamp));
-  uint32_t length = data->length - sizeof(LivoxLidarEthernetPacket) + 1;
+  uint32_t length = data->length - kHeaderSize;
   packet.raw_data.insert(packet.raw_data.end(), data->data, data->data + length);
   {
     std::unique_lock<std::mutex> lock(self->packet_mutex_);
@@ -163,19 +162,25 @@ void PubHandler::PublishPointCloud() {
 
 void PubHandler::CheckTimer(uint32_t id) {
 
-  if (PubHandler::is_timestamp_sync_.load()) { // Enable time synchronization
+  if (lidar_process_handlers_[id]->IsTimestampSynced()) { // Enable time synchronization
     auto& process_handler = lidar_process_handlers_[id];
-    uint64_t recent_time_ms = process_handler->GetRecentTimeStamp() / kRatioOfMsToNs;
-    if ((recent_time_ms % publish_interval_ms_ != 0) || recent_time_ms == 0) {
+    const uint64_t recent = process_handler->GetRecentTimeStamp();
+    const uint64_t base = process_handler->GetLidarBaseTime();
+    if (recent == 0 || base == 0) {
       return;
     }
 
-    uint64_t diff = process_handler->GetRecentTimeStamp() - process_handler->GetLidarBaseTime();
-    if (diff < publish_interval_tolerance_) {
+    // Emit once a full publish interval of points has accumulated. This used to
+    // test 'recent_ms % publish_interval_ms == 0', which only ever fired when the
+    // interval divided 1000ms exactly: at 15Hz the interval truncates to 66ms and
+    // point timestamps almost never land on a multiple of it, so frames were
+    // dropped or merged. Comparing elapsed time works for any rate, and matches
+    // what the unsynchronised branch below already does.
+    if (recent - base < publish_interval_tolerance_) {
       return;
     }
 
-    frame_.base_time[frame_.lidar_num] = process_handler->GetLidarBaseTime();
+    frame_.base_time[frame_.lidar_num] = base;
     points_[id].clear();
     process_handler->GetLidarPointClouds(points_[id]);
     if (points_[id].empty()) {
@@ -195,10 +200,9 @@ void PubHandler::CheckTimer(uint32_t id) {
   } else { // Disable time synchronization
     auto now_time = std::chrono::high_resolution_clock::now();
     //First Set
-    static bool first = true;
-    if (first) {
+    if (first_pub_) {
       last_pub_time_ = now_time;
-      first = false;
+      first_pub_ = false;
       return;
     }
     if (now_time - last_pub_time_ < std::chrono::nanoseconds(publish_interval_)) {
@@ -316,6 +320,7 @@ void LidarPubHandler::PointCloudProcess(RawPacket & pkt) {
 }
 
 void LidarPubHandler::LivoxLidarPointCloudProcess(RawPacket & pkt) {
+  is_timestamp_synced_.store(pkt.timestamp_synced);
   switch (pkt.data_type) {
     case kLivoxLidarCartesianCoordinateHighData:
       ProcessCartesianHighPoint(pkt);
@@ -369,6 +374,11 @@ void LidarPubHandler::SetLidarsExtParam(LidarExtParameter lidar_param) {
 void LidarPubHandler::ProcessCartesianHighPoint(RawPacket & pkt) {
   LivoxLidarCartesianHighRawPoint* raw = (LivoxLidarCartesianHighRawPoint*)pkt.raw_data.data();
   PointXyzlt point = {};
+  if (pkt.raw_data.size() < pkt.point_num * sizeof(LivoxLidarCartesianHighRawPoint)) {
+    return;
+  }
+  std::lock_guard<std::mutex> lock(mutex_);
+  points_clouds_.reserve(points_clouds_.size() + pkt.point_num * 1);
   for (uint32_t i = 0; i < pkt.point_num; i++) {
     if (pkt.extrinsic_applied_by_device) {
       point.x = raw[i].x / 1000.0;
@@ -389,7 +399,6 @@ void LidarPubHandler::ProcessCartesianHighPoint(RawPacket & pkt) {
     point.line = i % pkt.line_num;
     point.tag = raw[i].tag;
     point.offset_time = pkt.time_stamp + i * pkt.point_interval;
-    std::lock_guard<std::mutex> lock(mutex_);
     points_clouds_.push_back(point);
   }
 }
@@ -397,6 +406,11 @@ void LidarPubHandler::ProcessCartesianHighPoint(RawPacket & pkt) {
 void LidarPubHandler::ProcessCartesianLowPoint(RawPacket & pkt) {
   LivoxLidarCartesianLowRawPoint* raw = (LivoxLidarCartesianLowRawPoint*)pkt.raw_data.data();
   PointXyzlt point = {};
+  if (pkt.raw_data.size() < pkt.point_num * sizeof(LivoxLidarCartesianLowRawPoint)) {
+    return;
+  }
+  std::lock_guard<std::mutex> lock(mutex_);
+  points_clouds_.reserve(points_clouds_.size() + pkt.point_num * 1);
   for (uint32_t i = 0; i < pkt.point_num; i++) {
     if (pkt.extrinsic_applied_by_device) {
       point.x = raw[i].x / 100.0;
@@ -417,7 +431,6 @@ void LidarPubHandler::ProcessCartesianLowPoint(RawPacket & pkt) {
     point.line = i % pkt.line_num;
     point.tag = raw[i].tag;
     point.offset_time = pkt.time_stamp + i * pkt.point_interval;
-    std::lock_guard<std::mutex> lock(mutex_);
     points_clouds_.push_back(point);
   }
 }
@@ -425,6 +438,11 @@ void LidarPubHandler::ProcessCartesianLowPoint(RawPacket & pkt) {
 void LidarPubHandler::ProcessSphericalPoint(RawPacket& pkt) {
   LivoxLidarSpherPoint* raw = (LivoxLidarSpherPoint*)pkt.raw_data.data();
   PointXyzlt point = {};
+  if (pkt.raw_data.size() < pkt.point_num * sizeof(LivoxLidarSpherPoint)) {
+    return;
+  }
+  std::lock_guard<std::mutex> lock(mutex_);
+  points_clouds_.reserve(points_clouds_.size() + pkt.point_num * 1);
   for (uint32_t i = 0; i < pkt.point_num; i++) {
     double radius = raw[i].depth / 1000.0;
     double theta = raw[i].theta / 100.0 / 180 * PI;
@@ -452,7 +470,6 @@ void LidarPubHandler::ProcessSphericalPoint(RawPacket& pkt) {
     point.line = i % pkt.line_num;
     point.tag = raw[i].tag;
     point.offset_time = pkt.time_stamp + i * pkt.point_interval;
-    std::lock_guard<std::mutex> lock(mutex_);
     points_clouds_.push_back(point);
   }
 }
@@ -463,7 +480,11 @@ void LidarPubHandler::ProcessDoubleEchoPoint(RawPacket& pkt)
   LivoxLidarDoubleEchoRawPoint* raw = (LivoxLidarDoubleEchoRawPoint*)pkt.raw_data.data();
   PointXyzlt point1 = {};
   PointXyzlt point2 = {};
-  uint32_t index = 0;
+  if (pkt.raw_data.size() < pkt.point_num * sizeof(LivoxLidarDoubleEchoRawPoint)) {
+    return;
+  }
+  std::lock_guard<std::mutex> lock(mutex_);
+  points_clouds_.reserve(points_clouds_.size() + pkt.point_num * 2);
   for (uint32_t i = 0; i < pkt.point_num; i++) {
     if (pkt.extrinsic_applied_by_device) {
       point1.x = raw[i].x1 / 1000.0;
@@ -503,7 +524,6 @@ void LidarPubHandler::ProcessDoubleEchoPoint(RawPacket& pkt)
     point2.line = i % pkt.line_num;
     point2.tag = raw[i].tag2;
     point2.offset_time = pkt.time_stamp + i * pkt.point_interval;
-    std::lock_guard<std::mutex> lock(mutex_);
     points_clouds_.push_back(point1);
     points_clouds_.push_back(point2);
   }

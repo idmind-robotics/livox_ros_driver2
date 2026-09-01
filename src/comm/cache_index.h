@@ -42,6 +42,13 @@ class CacheIndex {
   int8_t GenerateIndexKey(const uint8_t livox_lidar_type, const uint32_t handle, std::string& key);
   void ResetIndex(LidarDevice *lidar);
 
+  /** Number of allocated slots. Indices are handed out from 0 upwards and never
+      released, so this is the valid prefix length of Lds::lidars_[]. */
+  uint8_t Size() {
+    std::lock_guard<std::mutex> lock(index_mutex_);
+    return static_cast<uint8_t>(map_index_.size());
+  }
+
  private:
   std::mutex index_mutex_;
   std::map<std::string, uint8_t> map_index_; /* key:handle/slot, val:index */

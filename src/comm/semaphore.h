@@ -25,6 +25,7 @@
 #ifndef LIVOX_ROS_DRIVER_SEMAPHORE_H_
 #define LIVOX_ROS_DRIVER_SEMAPHORE_H_
 
+#include <atomic>
 #include <mutex>
 #include <condition_variable>
 
@@ -36,14 +37,14 @@ class Semaphore {
   }
   void Signal();
   void Wait();
-  int GetCount() {
-    return count_;
+  int GetCount() const {
+    return count_.load(std::memory_order_relaxed);
   }
 
  private:
   std::mutex mutex_;
   std::condition_variable cv_;
-  volatile int count_;
+  std::atomic<int> count_;
 };
 
 } // namespace livox_ros

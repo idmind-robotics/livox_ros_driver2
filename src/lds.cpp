@@ -38,8 +38,7 @@ CacheIndex Lds::cache_index_;
 
 /* Member function --------------------------------------------------------- */
 Lds::Lds(const double publish_freq, const uint8_t data_src)
-    : lidar_count_(kMaxSourceLidar),
-      pcd_semaphore_(0),
+    : pcd_semaphore_(0),
       imu_semaphore_(0),
       publish_freq_(publish_freq),
       data_src_(data_src),
@@ -48,7 +47,6 @@ Lds::Lds(const double publish_freq, const uint8_t data_src)
 }
 
 Lds::~Lds() {
-  lidar_count_ = 0;
   ResetLds(0);
   printf("lds destory!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n");
 }
@@ -67,7 +65,6 @@ void Lds::SetLidarDataSrc(LidarDevice *lidar, uint8_t data_src) {
 }
 
 void Lds::ResetLds(uint8_t data_src) {
-  lidar_count_ = kMaxSourceLidar;
   for (uint32_t i = 0; i < kMaxSourceLidar; i++) {
     ResetLidar(&lidars_[i], data_src);
   }
@@ -83,7 +80,7 @@ void Lds::RequestExit() {
 }
 
 bool Lds::IsAllQueueEmpty() {
-  for (int i = 0; i < lidar_count_; i++) {
+  for (uint8_t i = 0; i < GetLidarCount(); i++) {
     if (!QueueIsEmpty(&lidars_[i].data)) {
       return false;
     }
@@ -92,7 +89,7 @@ bool Lds::IsAllQueueEmpty() {
 }
 
 bool Lds::IsAllQueueReadStop() {
-  for (int i = 0; i < lidar_count_; i++) {
+  for (uint8_t i = 0; i < GetLidarCount(); i++) {
     uint32_t data_size = QueueUsedSize(&lidars_[i].data);
     if (data_size) {
       return false;

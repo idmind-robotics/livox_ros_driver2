@@ -52,6 +52,7 @@ class LidarPubHandler {
   uint64_t GetRecentTimeStamp();
   uint32_t GetLidarPointCloudsSize();
   uint64_t GetLidarBaseTime();
+  bool IsTimestampSynced() const { return is_timestamp_synced_.load(); }
 
  private:
   void LivoxLidarPointCloudProcess(RawPacket & pkt);
@@ -71,6 +72,9 @@ class LidarPubHandler {
   };
   std::mutex mutex_;
   std::atomic_bool is_set_extrinsic_params_;
+  /** Per-lidar, not global: one unsynchronised device must not change how the
+      synchronised ones are framed. */
+  std::atomic_bool is_timestamp_synced_{false};
 };
   
 class PubHandler {
@@ -122,13 +126,12 @@ class PubHandler {
   //pub config
   uint64_t publish_interval_ = 100000000; //100 ms
   uint64_t publish_interval_tolerance_ = 100000000; //100 ms
-  uint64_t publish_interval_ms_ = 100; //100 ms
   TimePoint last_pub_time_;
 
   std::map<uint32_t, std::unique_ptr<LidarPubHandler>> lidar_process_handlers_;
   std::map<uint32_t, std::vector<PointXyzlt>> points_;
   std::map<uint32_t, LidarExtParameter> lidar_extrinsics_;
-  static std::atomic<bool> is_timestamp_sync_;
+  bool first_pub_ = true;
   uint16_t lidar_listen_id_ = 0;
 };
 

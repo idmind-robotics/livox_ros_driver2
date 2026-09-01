@@ -64,8 +64,11 @@ class Lds {
   // get publishing frequency
   double GetLdsFrequency() { return publish_freq_; }
 
+  /** Number of lidar slots actually in use. Used to be a member permanently
+      equal to kMaxSourceLidar, so every distribute pass swept all 32 slots. */
+  uint8_t GetLidarCount() { return cache_index_.Size(); }
+
  public:
-  uint8_t lidar_count_;                 /**< Lidar access handle. */
   LidarDevice lidars_[kMaxSourceLidar]; /**< The index is the handle */
   Semaphore pcd_semaphore_;
   Semaphore imu_semaphore_;

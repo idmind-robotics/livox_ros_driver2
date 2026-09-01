@@ -35,6 +35,7 @@ bool LivoxLidarConfigParser::Parse(std::vector<UserLivoxLidarConfig> &lidar_conf
   }
 
   lidar_configs.clear();
+  bool ok = false;
   char read_buffer[kMaxBufferSize];
   rapidjson::FileReadStream config_file(raw_file, read_buffer, sizeof(read_buffer));
   rapidjson::Document doc;
@@ -54,11 +55,11 @@ bool LivoxLidarConfigParser::Parse(std::vector<UserLivoxLidarConfig> &lidar_conf
       std::cout << "failed to parse basic configs" << std::endl;
       break;
     }
-    return true;
+    ok = true;
   } while (false);
 
   std::fclose(raw_file);
-  return false;
+  return ok;
 }
 
 bool LivoxLidarConfigParser::ParseUserConfigs(const rapidjson::Document &doc,
@@ -85,7 +86,7 @@ bool LivoxLidarConfigParser::ParseUserConfigs(const rapidjson::Document &doc,
     if (!config.HasMember("blind_spot_set")) {
       user_config.blind_spot_set = -1;
     } else {
-      user_config.blind_spot_set = static_cast<int8_t>(config["blind_spot_set"].GetInt());
+      user_config.blind_spot_set = config["blind_spot_set"].GetInt();
     }
     if (!config.HasMember("dual_emit_en")) {
       user_config.dual_emit_en = -1;
